@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Traffic Sign Recognition</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+      color: #2c3e50;
+    }
+
+    .container {
+      display: flex;
+      gap: 40px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #video-stream {
+      border: 4px solid #3498db;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .info {
+      font-size: 20px;
+      font-weight: 500;
+      color: #2c3e50;
+      white-space: nowrap;
+    }
+
+    .info span {
+      color: #16a085;
+      display: inline-block;
+      min-width: 160px; /* Prevent label text shifting */
+    }
+
+    button {
+      width: 120px;
+      padding: 10px 0;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background-color: #3498db;
+      color: white;
+      transition: background-color 0.3s ease;
+    }
+
+    button.stop {
+      background-color: #e74c3c;
+    }
+
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Traffic Sign Recognition</h1>
+  <div class="container">
+    <img id="video-stream" width="640" height="480" alt="Live Stream" />
+    <div class="controls">
+      <div class="info">Prediction: <span id="label">---</span></div>
+      <div class="info">Confidence: <span id="confidence">---</span></div>
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" class="stop" disabled>Stop</button>
+    </div>
+  </div>
+
+  <script>
+    let ws;
+    let lastLabel = "";
+    const img = document.getElementById("video-stream");
+    const label = document.getElementById("label");
+    const confidence = document.getElementById("confidence");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    function speak(text) {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      synth.cancel();
+      synth.speak(utterance);
+    }
+
+    function startStream() {
+      ws = new WebSocket("ws://127.0.0.1:8000/ws");
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        console.log("WebSocket connected.");
+      };
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          const blob = new Blob([event.data], { type: "image/jpeg" });
+          const url = URL.createObjectURL(blob);
+          img.src = url;
+        } else {
+          try {
+            const data = JSON.parse(event.data);
+            const currentLabel = data.label;
+            const conf = (data.confidence * 100).toFixed(2);
+
+            label.textContent = currentLabel;
+            confidence.textContent = conf + "%";
+
+            if (currentLabel !== lastLabel) {
+              speak(currentLabel);
+              lastLabel = currentLabel;
+            }
+          } catch (e) {
+            console.warn("Non-JSON message:", event.data);
+          }
+        }
+      };
+
+      ws.onclose = () => {
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        label.textContent = "---";
+        confidence.textContent = "---";
+        lastLabel = "";
+      };
+
+      ws.onerror = (err) => console.error("WebSocket error:", err);
+    }
+
+    function stopStream() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("stop");
+        setTimeout(() => ws.close(), 100);
+      }
+    }
+
+    startBtn.addEventListener("click", startStream);
+    stopBtn.addEventListener("click", stopStream);
+  </script>
+</body>
+</html>
